@@ -82,6 +82,7 @@ Planners in this category only accounts for the geometric and kinematic constrai
   - [PRM*](\ref gPRMstar)<br> An asymptotically optimal version of PRM; _uses the general cost framework._
   - [LazyPRM*](\ref gLazyPRMstar)<br> Lazy version of PRM*; _uses the general cost framework._
   - [RRT*](\ref gRRTstar)<br> An asymptotically optimal version of RRT; _uses the general cost framework._
+  - [Greedy RRT* (G-RRT*)](\ref gGreedyRRTstar)<br> A greedy version of RRT* that uses bi-directional search and greedy heuristics to find faster initial solutions with anytime convergence guarantees.
   - [RRT#](\ref gRRTsharp)<br> A variant of RRT* with an improved convergence rate. _It uses the general cost framework._
   - [RRTX](\ref gRRTXstatic)<br> A variant of RRT* with an improved convergence rate. _It uses the general cost framework._
   - [Informed RRT*](\ref gInformedRRTstar)<br> A variant of RRT* that uses heuristics to bound the search for optimal solutions. _It uses the general cost framework._
