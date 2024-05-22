@@ -87,6 +87,7 @@ ompl::geometric::GreedyRRTstar::GreedyRRTstar(const base::SpaceInformationPtr &s
     // Remove those parameters:
     params_.remove("use_admissible_heuristic");
     params_.remove("informed_sampling");
+    params_.remove("greedy_informed_sampling");
     params_.remove("pruned_measure");
     params_.remove("tree_pruning");
 }

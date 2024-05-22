@@ -57,11 +57,12 @@ namespace ompl
             @anchor gGreedyRRTstar
 
             @par Short description
-            \ref gGreedyRRTstar "G-RRT*" is a greedy version of the anytime Rapidly-exploring Random Trees algorithm (RRT*).  
-            It improves the initial solution-finding time of RRT* by maintaining two trees rooted at both the start and goal ends, 
-            advancing toward each other using greedy connection heuristics similar to RRT-Connect algorithm. 
-            It also accelerates the convergence rate of RRT* by introducing a greedy version of direct informed sampling procedure, 
-            which guides the sampling towards the promising region of the problem domain based on heuristics.
+            \ref gGreedyRRTstar "G-RRT*" is a greedy version of the anytime Rapidly-exploring Random Trees algorithm
+           (RRT*). It improves the initial solution-finding time of RRT* by maintaining two trees rooted at both the
+           start and goal ends, advancing toward each other using greedy connection heuristics similar to RRT-Connect
+           algorithm. It also accelerates the convergence rate of RRT* by introducing a greedy version of direct
+           informed sampling procedure, which guides the sampling towards the promising region of the problem domain
+           based on heuristics.
 
             @par Associated publication:
 
@@ -172,8 +173,12 @@ namespace ompl
                 return useInformedSampling_;
             }
 
-            /** \brief Use greedy informed sampling to exploit the existing solution path for faster convergence rates */
-            void setGreedyInformedSampling(bool greedyInformedSampling);
+            /** \brief Use greedy informed sampling to exploit the existing solution path for faster convergence rates
+             */
+            void setGreedyInformedSampling(bool greedyInformedSampling)
+            {
+                useGreedyInformedSampling_ = greedyInformedSampling;
+            }
 
             /** \brief Get the state greedy informed sampling */
             bool getGreedyInformedSampling() const
