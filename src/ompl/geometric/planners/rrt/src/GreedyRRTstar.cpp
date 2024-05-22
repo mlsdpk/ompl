@@ -1066,8 +1066,8 @@ int ompl::geometric::GreedyRRTstar::pruneTrees(const base::Cost &pruneTreeCost)
 
     if (fracBetter > pruneThreshold_)
     {
-        numPruned = pruneTree(tStart_, bestCost_, true);
-        numPruned += pruneTree(tGoal_, bestCost_, false);
+        numPruned = pruneTree(tStart_, pruneTreeCost, true);
+        numPruned += pruneTree(tGoal_, pruneTreeCost, false);
     }
 
     return numPruned;
@@ -1330,7 +1330,8 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::solutionHeuristic(const Motion 
             // Find the min from each start
             for (auto &startMotion : startMotions_)
             {
-                costToCome = opt_->betterCost(costToCome, opt_->motionCost(startMotion->state,
+                costToCome =
+                    opt_->betterCost(costToCome, opt_->motionCostHeuristic(startMotion->state,
                                                                            motion->state));  // lower-bounding cost from
                                                                                              // the start to the state
             }
@@ -1355,8 +1356,9 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::solutionHeuristic(const Motion 
             for (auto &goalMotion : goalMotions_)
             {
                 costToCome = opt_->betterCost(
-                    costToCome, opt_->motionCost(motion->state, goalMotion->state));  // lower-bounding cost from the
-                                                                                      // goal to the state
+                    costToCome,
+                    opt_->motionCostHeuristic(motion->state, goalMotion->state));  // lower-bounding cost from the
+                                                                                   // goal to the state
             }
         }
         else
@@ -1368,8 +1370,8 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::solutionHeuristic(const Motion 
         for (auto &startMotion : startMotions_)
         {
             costToGo = opt_->betterCost(
-                costToGo, opt_->motionCost(motion->state, startMotion->state));  // lower-bounding cost from the start
-                                                                                 // to the state
+                costToGo, opt_->motionCostHeuristic(motion->state, startMotion->state));  // lower-bounding cost from
+                                                                                          // the start to the state
         }
         return opt_->combineCosts(costToCome, costToGo);  // add the two costs
     }
