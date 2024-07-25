@@ -55,6 +55,8 @@ ompl::geometric::GreedyRRTstar::GreedyRRTstar(const base::SpaceInformationPtr &s
     Planner::declareParam<double>("range", this, &GreedyRRTstar::setRange, &GreedyRRTstar::getRange, "0.:1.:10000.");
     Planner::declareParam<double>("rewire_factor", this, &GreedyRRTstar::setRewireFactor,
                                   &GreedyRRTstar::getRewireFactor, "1.0:0.01:2.0");
+    Planner::declareParam<double>("greedy_biasing_ratio", this, &GreedyRRTstar::setGreedyBiasingRatio,
+                                  &GreedyRRTstar::getGreedyBiasingRatio, "0.:0.01:1.0");
     Planner::declareParam<bool>("use_k_nearest", this, &GreedyRRTstar::setKNearest, &GreedyRRTstar::getKNearest, "0,1");
     Planner::declareParam<bool>("delay_collision_checking", this, &GreedyRRTstar::setDelayCC,
                                 &GreedyRRTstar::getDelayCC, "0,1");
@@ -1490,11 +1492,12 @@ void ompl::geometric::GreedyRRTstar::allocSampler()
 
 bool ompl::geometric::GreedyRRTstar::sampleUniform(base::State *statePtr)
 {
-    // Attempt the focused sampler and return the result.
-    // If bestCost is changing a lot by small amounts, this could
-    // be prunedCost_ to reduce the number of times the informed sampling
-    // transforms are recalculated.
-    return infSampler_->sampleUniform(statePtr, greedyBestCost_);
+    // sample from the greedy informed set
+    if (rng_.uniform01() < greedyBiasingRatio_)
+        return infSampler_->sampleUniform(statePtr, greedyBestCost_);
+
+    // sample from the informed set
+    return infSampler_->sampleUniform(statePtr, bestCost_);
 }
 
 void ompl::geometric::GreedyRRTstar::calculateRewiringLowerBounds()
