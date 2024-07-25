@@ -71,6 +71,8 @@ namespace ompl
             arXiv preprint arXiv:2405.03411.
             DOI: <a href="https://doi.org/10.48550/arXiv.2405.03411">arXiv.2405.03411</a>.
             arXiv: <a href="https://arxiv.org/abs/2405.03411">2405.03411 [cs.RO]</a>.
+            Multimedia: <a href="https://www.youtube.com/playlist?list=PLfuffIv3zZBnQ1oTXYNsuXOfI9tjRBMQv">
+            YouTube Playlist</a>.
         */
 
         /** \brief Greedy version of the anytime Rapidly-exploring Random Trees algorithm */
@@ -282,6 +284,24 @@ namespace ompl
                 return goalBias_;
             }
 
+            /** \brief Set the greedy biasing ratio
+             *
+             * This ratio controls the exploration and exploitation of the random sampling
+             * process by sampling either from the informed set or from the greedy informed set.
+             * This probability is a real number between 0.0 and 1.0; if 0.0, it samples from the
+             * informed set with pure exploration, otherwise, setting to 1.0 will only sample from
+             * the greedy informed set with no exploration. */
+            void setGreedyBiasingRatio(double greedyBiasingRatio)
+            {
+                greedyBiasingRatio_ = greedyBiasingRatio;
+            }
+
+            /** \brief Get the greedy biasing ratio the planner is using */
+            double getGreedyBiasingRatio() const
+            {
+                return greedyBiasingRatio_;
+            }
+
             unsigned int numIterations() const
             {
                 return iterations_;
@@ -476,6 +496,10 @@ namespace ompl
             /** \brief The fraction of time the goal is picked as the state to expand towards (if such a state is
              * available) */
             double goalBias_{.05};
+
+            /** \brief A fration of time a random state is sampled from the greedy informed set to control
+             * the exploration and exploitation process.  */
+            double greedyBiasingRatio_{.9};
 
             /** \brief The maximum length of a motion to be added to a tree */
             double maxDistance_{0.};
