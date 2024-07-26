@@ -511,7 +511,7 @@ namespace ompl
             RNG rng_;
 
             /** \brief Option to use k-nearest search for rewiring */
-            bool useKNearest_{true};
+            bool useKNearest_{false};
 
             /** \brief The rewiring factor, s, so that r_rrt = s \times r_rrt* > r_rrt* (or k_rrt = s \times k_rrt* >
              * k_rrt*) */
@@ -546,7 +546,7 @@ namespace ompl
             bool useAdmissibleCostToCome_{true};
 
             /** \brief The number of attempts to make at informed sampling */
-            unsigned int numSampleAttempts_{100u};
+            unsigned int numSampleAttempts_{1u};
 
             unsigned int ancestry_depth_{0u};
 
