@@ -49,6 +49,7 @@
 
 ompl::geometric::GreedyRRTstar::GreedyRRTstar(const base::SpaceInformationPtr &si) : base::Planner(si, "GreedyRRTstar")
 {
+    specs_.approximateSolutions = true;
     specs_.recognizedGoal = base::GOAL_SAMPLEABLE_REGION;
     specs_.directed = true;
 
@@ -823,7 +824,6 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
     if (bestGoalMotion_)
     {
         ptc.terminate();
-
         solutionFound = true;
 
         Motion *solution = bestGoalMotion_->connection;
@@ -859,6 +859,34 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
 
         psol.setOptimized(opt_, opt_->combineCosts(bestGoalMotion_->connection->cost, bestGoalMotion_->cost),
                           opt_->isSatisfied(bestCost_));
+        pdef_->addSolutionPath(psol);
+    }
+    else if (approxsol)
+    {
+        ptc.terminate();
+        solutionFound = true;
+
+        /* construct the solution path */
+        std::vector<Motion *> mpath;
+
+        Motion *solution = approxsol;
+        while (solution != nullptr)
+        {
+            mpath.push_back(solution);
+            solution = solution->parent;
+        }
+
+        auto path(std::make_shared<PathGeometric>(si_));
+        for (int i = mpath.size() - 1; i >= 0; --i)
+            path->append(mpath[i]->state);
+
+        // Add the solution path.
+        base::PlannerSolution psol(path);
+        psol.setPlannerName(getName());
+        psol.setApproximate(approxdif);
+
+        // Does the solution satisfy the optimization objective?
+        psol.setOptimized(opt_, approxsol->cost, opt_->isSatisfied(bestCost_));
         pdef_->addSolutionPath(psol);
     }
 
