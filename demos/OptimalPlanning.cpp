@@ -448,8 +448,8 @@ bool argParse(int argc, char **argv, double *runTimePtr, optimalPlanner *planner
         "must be greater than 0.")("planner,p", bpo::value<std::string>()->default_value("RRTstar"),
                                    "(Optional) Specify the optimal planner to use, defaults to RRTstar if not given. "
                                    "Valid options are AITstar, "
-                                   "BFMTstar, BITstar, CForest, EITstar, EIRMstar, FMTstar, InformedRRTstar, PRMstar, RRTstar, "
-                                   "and SORRTstar.")  // Alphabetical order
+                                   "BFMTstar, BITstar, CForest, EITstar, EIRMstar, FMTstar, GreedyRRTstar, InformedRRTstar, PRMstar, "
+                                   "RRTstar and SORRTstar.")  // Alphabetical order
         ("objective,o", bpo::value<std::string>()->default_value("PathLength"),
          "(Optional) Specify the optimization objective, defaults to PathLength if not given. Valid options are "
          "PathClearance, PathLength, ThresholdPathLength, and WeightedLengthAndClearanceCombo.")  // Alphabetical order
