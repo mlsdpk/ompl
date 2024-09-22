@@ -68,6 +68,9 @@ ompl::geometric::RRTstar::RRTstar(const base::SpaceInformationPtr &si)
     Planner::declareParam<bool>("pruned_measure", this, &RRTstar::setPrunedMeasure, &RRTstar::getPrunedMeasure, "0,1");
     Planner::declareParam<bool>("informed_sampling", this, &RRTstar::setInformedSampling, &RRTstar::getInformedSampling,
                                 "0,1");
+    Planner::declareParam<bool>("greedy_informed_sampling", this, &RRTstar::setGreedyInformedSampling, &RRTstar::getGreedyInformedSampling,
+                                "0,1");
+    Planner::declareParam<double>("greedy_biasing_ratio", this, &RRTstar::setGreedyBiasingRatio, &RRTstar::getGreedyBiasingRatio, "0.:.05:1.");
     Planner::declareParam<bool>("sample_rejection", this, &RRTstar::setSampleRejection, &RRTstar::getSampleRejection,
                                 "0,1");
     Planner::declareParam<bool>("new_state_rejection", this, &RRTstar::setNewStateRejection,
@@ -522,6 +525,30 @@ ompl::base::PlannerStatus ompl::geometric::RRTstar::solve(const base::PlannerTer
                         pruneTree(bestCost_);
                     }
 
+                    if (useGreedyInformedSampling_)
+                    {
+                        if (rng_.uniform01() < greedyBiasingRatio_)
+                        {
+                            ompl::base::Cost c_max{-std::numeric_limits<double>::infinity()};
+
+                            Motion *iterMotion = bestGoalMotion_;  // starting from best goal vertex
+                            while (iterMotion != nullptr)
+                            {
+                                // combine heuristic costs f^: cost-to-come (g^) + cost-to-go (h^)                         
+                                auto c_best = solutionHeuristic(iterMotion);
+
+                                if (opt_->isCostBetterThan(c_max, c_best))
+                                {
+                                    c_max = c_best;
+                                }
+
+                                iterMotion = iterMotion->parent;
+                            }
+
+                            bestCost_ = c_max;
+                        }
+                    }
+
                     if (intermediateSolutionCallback)
                     {
                         std::vector<const base::State *> spath;
@@ -905,7 +932,7 @@ bool ompl::geometric::RRTstar::keepCondition(const Motion *motion, const base::C
     return !opt_->isCostBetterThan(threshold, solutionHeuristic(motion));
 }
 
-ompl::base::Cost ompl::geometric::RRTstar::solutionHeuristic(const Motion *motion) const
+ompl::base::Cost ompl::geometric::RRTstar::solutionHeuristic(const Motion *motion, bool use_greedy_set) const
 {
     base::Cost costToCome;
     if (useAdmissibleCostToCome_)
@@ -916,9 +943,18 @@ ompl::base::Cost ompl::geometric::RRTstar::solutionHeuristic(const Motion *motio
         // Find the min from each start
         for (auto &startMotion : startMotions_)
         {
-            costToCome = opt_->betterCost(
-                costToCome, opt_->motionCost(startMotion->state,
-                                             motion->state));  // lower-bounding cost from the start to the state
+            if (use_greedy_set)
+            {
+                costToCome = opt_->betterCost(
+                    costToCome, opt_->motionCostHeuristic(startMotion->state,
+                                            motion->state));  // lower-bounding cost from the start to the state
+            }
+            else
+            {
+                costToCome = opt_->betterCost(
+                    costToCome, opt_->motionCost(startMotion->state,
+                                            motion->state));  // lower-bounding cost from the start to the state
+            }                                 
         }
     }
     else
@@ -1040,6 +1076,11 @@ void ompl::geometric::RRTstar::setInformedSampling(bool informedSampling)
             allocSampler();
         }
     }
+}
+
+void ompl::geometric::RRTstar::setGreedyInformedSampling(bool greedyInformedSampling)
+{
+    useGreedyInformedSampling_ = greedyInformedSampling;
 }
 
 void ompl::geometric::RRTstar::setSampleRejection(const bool reject)

@@ -290,15 +290,6 @@ ompl::geometric::GreedyRRTstar::GrowState ompl::geometric::GreedyRRTstar::growTr
     // Find nearby neighbors of the new motion
     getNeighbors(tree, motion, nbh);
 
-    // number of all nearby vertices that lie within the neighborhood radius
-    auto nearby_vertices_size = nbh.size();
-
-    // Get ancestors of nearby neighbors
-    // getAncestors(tree, nbh);
-
-    // number of ancestor vertices of nearby neighbors (excluding neighbors)
-    auto ancestors_size = nbh.size() - nearby_vertices_size;
-
     rewireTest += nbh.size();
     ++statesGenerated;
 
@@ -734,45 +725,50 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
                     }
                 }
 
+                // compute the greedy best cost from the current solution
                 if (useGreedyInformedSampling_ && !bestGoalMotions_.empty())
                 {
-                    ompl::base::Cost c_max{-std::numeric_limits<double>::infinity()};
-
-                    Motion *iterMotion = bestGoalMotion_->connection;  // starting from best start point
-                    while (iterMotion != nullptr)
+                    // we don't need to compute c_max always
+                    // only compute c_max if there is a change in the solution cost
+                    if (updatedSolution)
                     {
-                        // combine heuristic costs f^: cost-to-come (g^) + cost-to-go (h^)
-                        auto c_best = opt_->combineCosts(costToComeHeuristic(iterMotion, true),
-                                                         costToGoHeuristic(iterMotion, true));
+                        ompl::base::Cost c_max{-std::numeric_limits<double>::infinity()};
 
-                        if (opt_->isCostBetterThan(c_max, c_best))
+                        Motion *iterMotion = bestGoalMotion_->connection;  // starting from best start point
+                        while (iterMotion != nullptr)
                         {
-                            c_max = c_best;
+                            // combine heuristic costs f^: cost-to-come (g^) + cost-to-go (h^)
+                            auto c_best = opt_->combineCosts(costToComeHeuristic(iterMotion, true),
+                                                             costToGoHeuristic(iterMotion, true));
+
+                            if (opt_->isCostBetterThan(c_max, c_best))
+                            {
+                                c_max = c_best;
+                            }
+
+                            iterMotion = iterMotion->parent;
                         }
 
-                        iterMotion = iterMotion->parent;
-                    }
-
-                    iterMotion = bestGoalMotion_;  // starting from best goal point itself
-                    while (iterMotion != nullptr)
-                    {
-                        // combine heuristic costs f^: cost-to-come (g^) + cost-to-go (h^)
-                        auto c_best = opt_->combineCosts(costToComeHeuristic(iterMotion, false),
-                                                         costToGoHeuristic(iterMotion, false));
-
-                        if (opt_->isCostBetterThan(c_max, c_best))
+                        iterMotion = bestGoalMotion_;  // starting from best goal point itself
+                        while (iterMotion != nullptr)
                         {
-                            c_max = c_best;
+                            // combine heuristic costs f^: cost-to-come (g^) + cost-to-go (h^)
+                            auto c_best = opt_->combineCosts(costToComeHeuristic(iterMotion, false),
+                                                             costToGoHeuristic(iterMotion, false));
+
+                            if (opt_->isCostBetterThan(c_max, c_best))
+                            {
+                                c_max = c_best;
+                            }
+
+                            iterMotion = iterMotion->parent;
                         }
 
-                        iterMotion = iterMotion->parent;
-                    }
-
-                    // check if there is an improvement in the greedy cost
-                    if (opt_->isCostBetterThan(c_max, greedyBestCost_))
-                    {
-                        greedyBestCost_ = c_max;
-                        updatedSolution = true;
+                        // check if there is an improvement in the greedy cost
+                        if (opt_->isCostBetterThan(c_max, greedyBestCost_))
+                        {
+                            greedyBestCost_ = c_max;
+                        }
                     }
                 }
 
