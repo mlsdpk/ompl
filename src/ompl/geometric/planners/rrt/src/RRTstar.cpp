@@ -70,6 +70,8 @@ ompl::geometric::RRTstar::RRTstar(const base::SpaceInformationPtr &si)
                                 "0,1");
     Planner::declareParam<bool>("greedy_informed_sampling", this, &RRTstar::setGreedyInformedSampling, &RRTstar::getGreedyInformedSampling,
                                 "0,1");
+    Planner::declareParam<bool>("path_biased_sampling", this, &RRTstar::setPathBiasedSampling, &RRTstar::getPathBiasedSampling,
+                                "0,1");
     Planner::declareParam<double>("greedy_biasing_ratio", this, &RRTstar::setGreedyBiasingRatio, &RRTstar::getGreedyBiasingRatio, "0.:.05:1.");
     Planner::declareParam<bool>("sample_rejection", this, &RRTstar::setSampleRejection, &RRTstar::getSampleRejection,
                                 "0,1");
@@ -130,6 +132,7 @@ void ompl::geometric::RRTstar::setup()
 
         // Set the bestCost_ and prunedCost_ as infinite
         bestCost_ = opt_->infiniteCost();
+        prevBestCost_ = opt_->infiniteCost();
         prunedCost_ = opt_->infiniteCost();
     }
     else
@@ -161,6 +164,7 @@ void ompl::geometric::RRTstar::clear()
 
     iterations_ = 0;
     bestCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
+    prevBestCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
     prunedCost_ = base::Cost(std::numeric_limits<double>::quiet_NaN());
     prunedMeasure_ = 0.0;
 }
@@ -258,6 +262,15 @@ ompl::base::PlannerStatus ompl::geometric::RRTstar::solve(const base::PlannerTer
 
     // our functor for sorting nearest neighbors
     CostIndexCompare compareFn(costs, *opt_);
+
+    // admissible estimate of the best cost
+    // only used during path biased sampling
+    u_ = opt_->infiniteCost();
+    for (auto &startMotion : startMotions_)
+    {
+        u_ = opt_->betterCost(
+            u_, opt_->costToGo(startMotion->state, pdef_->getGoal().get()));          
+    }
 
     while (ptc == false)
     {
@@ -490,6 +503,7 @@ ompl::base::PlannerStatus ompl::geometric::RRTstar::solve(const base::PlannerTer
                     // vertex at a time, so there can only be one goal vertex at this moment.
                     bestGoalMotion_ = goalMotions_.front();
                     bestCost_ = bestGoalMotion_->cost;
+                    prevBestCost_ = bestCost_;
                     updatedSolution = true;
 
                     OMPL_INFORM("%s: Found an initial solution with a cost of %.2f in %u iterations (%u "
@@ -578,6 +592,28 @@ ompl::base::PlannerStatus ompl::geometric::RRTstar::solve(const base::PlannerTer
         // terminate if a sufficient solution is found
         if (bestGoalMotion_ && opt_->isSatisfied(bestCost_))
             break;
+
+        // updated path biased sampling probability
+        if (usePathBiasedSampling_)
+        {
+            if (opt_->isFinite(prevBestCost_))
+            {
+                if (opt_->isCostBetterThan(bestCost_, prevBestCost_))
+                {
+                    pathBiasedSamplingProbability_ =
+                        pathBiasedSamplingForgettingFactor_ * pathBiasedSamplingProbability_ +
+                        (1 - pathBiasedSamplingForgettingFactor_) *
+                            ((prevBestCost_.value() - bestCost_.value()) / (prevBestCost_.value() - u_.value()));
+                }
+                else
+                {
+                    pathBiasedSamplingProbability_ =
+                        pathBiasedSamplingForgettingFactor_ * pathBiasedSamplingProbability_;
+                }
+
+                prevBestCost_ = bestCost_;
+            }
+        }
     }
 
     // Add our solution (if it exists)
@@ -1083,6 +1119,11 @@ void ompl::geometric::RRTstar::setGreedyInformedSampling(bool greedyInformedSamp
     useGreedyInformedSampling_ = greedyInformedSampling;
 }
 
+void ompl::geometric::RRTstar::setPathBiasedSampling(bool pathBiasedSampling)
+{
+    usePathBiasedSampling_ = pathBiasedSampling;
+}
+
 void ompl::geometric::RRTstar::setSampleRejection(const bool reject)
 {
     if (static_cast<bool>(opt_) == true)
@@ -1179,7 +1220,34 @@ void ompl::geometric::RRTstar::allocSampler()
 bool ompl::geometric::RRTstar::sampleUniform(base::State *statePtr)
 {
     // Use the appropriate sampler
-    if (useInformedSampling_ || useRejectionSampling_)
+    if (usePathBiasedSampling_)
+    {
+        // path-biased sampling approach from
+        // Adaptive hybrid local–global sampling for fast informed sampling-based optimal path planning
+        // https://link.springer.com/article/10.1007/s10514-024-10157-5
+        // referenced from the code provided in the above article at
+        // https://github.com/JRL-CARI-CNR-UNIBS/graph_core/blob/55779d383001814eba57a0dd1766cd23a59334fb/graph_core/src/graph_core/samplers/tube_informed_sampler.cpp
+
+        // Check if a solution path has been found
+        if (!opt_->isFinite(bestCost_))
+        {
+            // fallback to regular sampler
+            return infSampler_->sampleUniform(statePtr, bestCost_);
+        }
+
+        // we have a solution
+        if (rng_.uniform01() < pathBiasedSamplingProbability_)
+        {
+            auto radius = pathBiasedSamplingRadius_ * (bestCost_.value() - u_.value());
+            return pathBiasedSampling(statePtr, radius);
+        }
+        else
+        {
+            return infSampler_->sampleUniform(statePtr, bestCost_);
+        }
+    }
+    // informed sampling
+    else if (useInformedSampling_ || useRejectionSampling_)
     {
         // Attempt the focused sampler and return the result.
         // If bestCost is changing a lot by small amounts, this could
@@ -1195,6 +1263,121 @@ bool ompl::geometric::RRTstar::sampleUniform(base::State *statePtr)
         // Always true
         return true;
     }
+}
+
+bool ompl::geometric::RRTstar::pathBiasedSampling(base::State *statePtr, const double radius)
+{
+    // Whether we were successful in creating a sample.
+    bool foundSample = false;
+
+    // construct the solution path
+    std::vector<Eigen::VectorXd> path;
+    Motion *iterMotion = bestGoalMotion_;
+
+    // allocate vector from motion
+    Eigen::VectorXd q(si_->getStateDimension());
+    while (iterMotion != nullptr)
+    {
+        // this is not a good way to do it here
+        // since it should support for all state spaces
+        // but this will not go into main branch so its fine for now
+        const auto *s = static_cast<const ompl::base::RealVectorStateSpace::StateType *>(iterMotion->state);
+
+        // update vector with new state
+        for (unsigned int idx = 0u; idx < si_->getStateDimension(); ++idx)
+        {
+            q[idx] = (*s)[idx];
+        }
+        path.push_back(q);
+        iterMotion = iterMotion->parent;
+    }
+
+    std::vector<double> partial_length;
+    std::vector<double> partial_cost;
+    partial_length.resize(path.size(), 0);
+    partial_cost.resize(path.size(), 0);
+
+    double length = 0.0;
+    for (size_t idx = 1; idx < path.size(); idx++)
+    {
+        partial_length.at(idx) = partial_length.at(idx - 1) + (path.at(idx) - path.at(idx - 1)).norm();
+        partial_cost.at(idx) = partial_cost.at(idx - 1) + (path.at(idx - 1) - path.at(idx)).norm();
+    }
+    length = partial_length.back();
+
+    // Spend iterations trying to find a path-biased sample:
+    for (unsigned int i = 0u; i < numSampleAttempts_ && !foundSample; ++i)
+    {
+        double abscissa = rng_.uniform01() * length;
+
+        // get center point
+        auto pointOnCurvilinearAbscissa = [&]()
+        {
+            Eigen::VectorXd p;
+            if (abscissa <= 0)
+                p = path.at(0);
+            else if (abscissa >= length)
+                p = path.back();
+
+            for (size_t idx = 1; idx < path.size(); idx++)
+            {
+                if (partial_length.at(idx) > abscissa)
+                {
+                    double ratio =
+                        (abscissa - partial_length.at(idx - 1)) / (partial_length.at(idx) - partial_length.at(idx - 1));
+                    p = path.at(idx - 1) + ratio * (path.at(idx) - path.at(idx - 1));
+                    return p;
+                }
+            }
+
+            p = path.back();
+            return p;
+        };
+        Eigen::VectorXd center = pointOnCurvilinearAbscissa();
+
+        Eigen::VectorXd ball(si_->getStateDimension());
+        ball.setRandom();
+        ball *= std::pow(rng_.uniform01(), 1.0 / (double)si_->getStateDimension()) / ball.norm();
+
+        Eigen::VectorXd q = radius * ball + center;
+
+        // construct state from eigen vector
+        auto *s = static_cast<ompl::base::RealVectorStateSpace::StateType *>(statePtr);
+        for (unsigned int d = 0u; d < si_->getStateDimension(); ++d)
+        {
+            (*s)[d] = q[d];
+        }
+
+        // make sure this state satisfies our bounds
+        bool satisfy_bounds = si_->getStateSpace()->satisfiesBounds(statePtr);
+
+        // also make sure it is inside informed set
+        // this state is inside the informed set if and only if
+        // the heuristic cost-to-come g(x) + heuristic cost-to-go h(x)
+        // is lower than the current best cost
+
+        // Start with infinite cost
+        base::Cost costToCome = opt_->infiniteCost();
+
+        // lower-bounding cost from the start to the state
+        for (auto &startMotion : startMotions_)
+        {
+            costToCome = opt_->betterCost(costToCome, opt_->motionCostHeuristic(startMotion->state, statePtr));
+        }
+
+        // lower-bounding cost from the state to the goal
+        const base::Cost costToGo = opt_->costToGo(statePtr, pdef_->getGoal().get());
+        const base::Cost heuristicCost = opt_->combineCosts(costToCome, costToGo);  // add the two costs
+
+        bool inside_informed_set = opt_->isCostBetterThan(heuristicCost, bestCost_);
+
+        if (satisfy_bounds && inside_informed_set)
+        {
+            foundSample = true;
+        }
+    }
+
+    return foundSample;
 }
 
 void ompl::geometric::RRTstar::calculateRewiringLowerBounds()

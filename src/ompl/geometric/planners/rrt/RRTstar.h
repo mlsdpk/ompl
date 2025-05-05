@@ -39,6 +39,7 @@
 
 #include "ompl/geometric/planners/PlannerIncludes.h"
 #include "ompl/base/OptimizationObjective.h"
+#include "ompl/base/spaces/RealVectorStateSpace.h"
 #include "ompl/datastructures/NearestNeighbors.h"
 
 #include <limits>
@@ -225,6 +226,13 @@ namespace ompl
                 return useGreedyInformedSampling_;
             }
 
+            void setPathBiasedSampling(bool pathBiasedSampling);
+
+            bool getPathBiasedSampling() const
+            {
+                return usePathBiasedSampling_;
+            }
+
             void setGreedyBiasingRatio(double greedyBiasingRatio)
             {
                 greedyBiasingRatio_ = greedyBiasingRatio;
@@ -386,6 +394,8 @@ namespace ompl
             /** \brief Generate a sample */
             bool sampleUniform(base::State *statePtr);
 
+            bool pathBiasedSampling(base::State *statePtr, const double radius);
+
             /** \brief Free the memory allocated by this planner */
             void freeMemory();
 
@@ -499,6 +509,8 @@ namespace ompl
 
             bool useGreedyInformedSampling_{false};
 
+            bool usePathBiasedSampling_{false};
+
             double greedyBiasingRatio_{0.9};
 
             /** \brief The status of the sample rejection parameter. */
@@ -527,6 +539,12 @@ namespace ompl
 
             /** \brief The cost at which the graph was last pruned */
             base::Cost prunedCost_{std::numeric_limits<double>::quiet_NaN()};
+
+            base::Cost prevBestCost_{std::numeric_limits<double>::quiet_NaN()};
+            base::Cost u_{std::numeric_limits<double>::quiet_NaN()};
+            double pathBiasedSamplingProbability_{0.};
+            double pathBiasedSamplingRadius_{0.02};
+            double pathBiasedSamplingForgettingFactor_{0.999};
 
             /** \brief The measure of the problem when we pruned it (if this isn't in use, it will be set to
              * si_->getSpaceMeasure())*/
