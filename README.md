@@ -16,8 +16,8 @@ If you use any of this code in your research work, please consider citing:
 Continuous Integration Status
 -----------------------------
 
-[![Build](https://github.com/ompl/ompl/actions/workflows/build.yml/badge.svg?branch=pr-github-actions)](https://github.com/ompl/ompl/actions/workflows/build.yml)
-[![Format](https://github.com/ompl/ompl/actions/workflows/format.yml/badge.svg?branch=pr-github-actions)](https://github.com/ompl/ompl/actions/workflows/format.yml?branch=pr-github-actions)
+[![Build](https://github.com/ompl/ompl/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/ompl/ompl/actions/workflows/build.yml)
+[![Wheels](https://github.com/ompl/ompl/actions/workflows/wheels.yaml/badge.svg?branch=main)](https://github.com/ompl/ompl/actions/workflows/wheels.yaml)
 
 Installation
 ------------

@@ -11,6 +11,7 @@
     <li class="nav-item"><a class="nav-link" id="osx-tab" data-toggle="pill" href="#osx" role="tab" aria-controls="macos" aria-selected="false">macOS</a></li>
     <li class="nav-item"><a class="nav-link" id="windows-tab" data-toggle="pill" href="#windows" role="tab" aria-controls="windows" aria-selected="false">MS Windows</a></li>
     <li class="nav-item"><a class="nav-link" id="cmake-fetch-tab" data-toggle="pill" href="#cmakefetch" role="tab" aria-controls="cmakefetch" aria-selected="false">CMake Fetchcontent</a></li>
+    <li class="nav-item"><a class="nav-link" id="python-wheels-tab" data-toggle="pill" href="#pythonwheels" role="tab" aria-controls="Python Wheels" aria-selected="false">Python Wheeels</a></li>
   </ul>
 </div>
 
@@ -128,6 +129,14 @@ FetchContent_MakeAvailable(ompl)
 add_executable(main main.cpp)
 target_link_libraries(main PRIVATE ompl::ompl)
     </pre>
+  </div>
+
+  <div class="tab-pane fade" id="pythonwheels" role="tabpanel" aria-labelledby="python-wheels-tab">
+
+  <h2>Python Wheels</h2>
+  There are pre-built binary wheels for ompl Python versions 3.10&ensp;3.13. They are available for 64-bit versions of Linux (x84_64 and ARM), MacOS 13 (Intel) and MacOS 15 (ARM).
+  
+  Simply type: `pip3 install ompl`
   </div>
 </div>
 \endhtmlonly

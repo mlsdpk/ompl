@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import re
@@ -108,7 +108,7 @@ class CMakeBuild(build_ext):
 
         if sys.platform.startswith("darwin"):
             # TODO: Move this out to configuration
-            cmake_args += ["-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0"]
+            cmake_args += ["-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0"]
 
             # Cross-compile support for macOS - respect ARCHFLAGS if set
             archs = re.findall(r"-arch (\S+)", os.environ.get("ARCHFLAGS", ""))
@@ -147,14 +147,11 @@ class CMakeBuild(build_ext):
                 shell=True,
             )
 
-
+top_level_dir = Path(__file__).parent.parent
+long_description = (top_level_dir / "README.md").read_text()
+version = re.search("^project\\(ompl VERSION ([0-9.]+)",
+                    open(top_level_dir / "CMakeLists.txt", "r").read(), re.M).group(1)
 setup(
-    name="ompl",
-    version="1.6.0",
-    description="The Open Motion Planning Library",
-    author="Ioan A. Șucan, Mark Moll, Zachary Kingston, Lydia E. Kavraki",
-    author_email="zak@rice.edu",
-    url="https://ompl.kavrakilab.org",
     ext_modules=[CMakeExtension("ompl", sourcedir="..")],
     cmdclass={"build_ext": CMakeBuild},
     packages=[
@@ -165,5 +162,8 @@ setup(
         "ompl.tools",
         "ompl.util",
     ],
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     package_dir={"ompl": "./ompl"},
+    version=version,
 )
