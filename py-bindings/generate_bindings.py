@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 ######################################################################
 # Software License Agreement (BSD License)
@@ -178,7 +178,7 @@ class ompl_base_generator_t(code_generator_t):
 
         self.std_ns.class_('vector< std::shared_ptr<ompl::base::StateSpace> >').rename(
             'vectorStateSpacePtr')
-        #self.std_ns.class_('vector< <ompl::base::PlannerSolution> >').rename(
+        # self.std_ns.class_('vector< <ompl::base::PlannerSolution> >').rename(
         # 'vectorPlannerSolution')
         self.std_ns.class_(f'map< {self.string_decl}, std::shared_ptr<ompl::base::GenericParam> >').rename(
             'mapStringToGenericParam')
@@ -270,12 +270,77 @@ class ompl_base_generator_t(code_generator_t):
             # add array access to double components of state
             self.add_array_access(state, 'double')
 
+        # Add setters to Owen/Vana/VanaOwen state spaces
+        for stype, member_functions in [
+            ("Owen", ["yaw"]),
+            ("Vana", ["yaw", "pitch"]),
+            ("VanaOwen", ["yaw", "pitch"]),
+        ]:
+            state_type_cls = self.ompl_ns.class_(f"{stype}StateSpace").class_(
+                "StateType"
+            )
+            # Add array access to StateType
+            self.add_array_access(state_type_cls, "double")
+            for member_function in member_functions:
+                state_type_cls.member_functions(
+                    member_function, return_type="double &"
+                ).exclude()
+                member_function_camelize = (
+                    member_function[0].upper() + member_function[1:]
+                )
+                state_type_cls.add_registration_code(
+                    f'def("set{member_function_camelize}", &__set{member_function_camelize})'
+                )
+                state_type_cls.add_declaration_code(
+    """
+void __set%(member_function_camelize)s(%(cls)s* self, double %(member_function)s)
+{
+    self->%(member_function)s() = %(member_function)s;
+}
+"""
+    % {
+        "cls": state_type_cls.decl_string,
+        "member_function": member_function,
+        "member_function_camelize": member_function_camelize,
+    })
+
         # I don't know how to export a C-style array of an enum type
-        for stype in ['Dubins', 'ReedsShepp']:
+        for stype in ['ReedsShepp']:
             self.ompl_ns.enumeration(stype + 'PathSegmentType').exclude()
-            self.ompl_ns.class_(stype + 'Path').exclude()
-            self.ompl_ns.class_(stype + 'StateSpace').member_function(
-                stype[0].lower()+stype[1:]).exclude()
+            self.ompl_ns.class_(stype + "StateSpace").class_("PathType").exclude()
+
+        for stype in ['Dubins', 'ReedsShepp']:
+            self.ompl_ns.class_(stype + "StateSpace").member_function(
+                "getPath",
+                arg_types=[
+                    "::ompl::base::State const *",
+                    "::ompl::base::State const *",
+                ],
+            ).exclude()
+
+        # access to public member variables
+        cls = self.ompl_ns.class_("DubinsStateSpace").class_("PathType")
+        cls.variable("type_").include()
+        cls.variable("length_").include()
+        cls.variable("reverse_").include()
+
+        # Disable the other dubins overload
+        self.ompl_ns.class_("DubinsStateSpace").member_function(
+            "getPath",
+            arg_types=[
+                "::ompl::base::State const *",
+                "::ompl::base::State const *",
+                "double",
+            ],
+        ).exclude()
+        self.ompl_ns.class_("DubinsStateSpace").member_function(
+            "distance",
+            arg_types=[
+                "::ompl::base::State const *",
+                "::ompl::base::State const *",
+                "double",
+            ],
+        ).exclude()
         # don't expose these utility functions that return double*
         self.ompl_ns.member_functions('getValueAddressAtIndex').exclude()
         self.ompl_ns.member_functions('getValueAddressAtName').exclude()
@@ -333,7 +398,7 @@ class ompl_base_generator_t(code_generator_t):
             self.add_function_wrapper(
                 'double(ompl::base::AtlasChart *)', 'AtlasChartBiasFunction',
                 'Bias function for sampling a chart from an atlas.')
-                    # add code for numpy.array <-> Eigen conversions
+            # add code for numpy.array <-> Eigen conversions
             self.mb.add_declaration_code(open(join(dirname(__file__), \
                 'numpy_eigen.cpp'), 'r').read())
             self.mb.add_registration_code("""
@@ -346,11 +411,14 @@ class ompl_base_generator_t(code_generator_t):
             # \todo: figure why commented-out code causes a problem.
             self.ompl_ns.class_('ConstraintIntersection').exclude()
 
-            signatures = ['::Eigen::Ref<const Eigen::Matrix<double, -1, 1, 0, -1, 1>, 0, Eigen::InnerStride<1> > const &',
-                          '::Eigen::Ref<const Eigen::Matrix<double, -1, 1, 0>, 0, Eigen::InnerStride<1>> const &']
+            signatures = [
+                "::Eigen::Ref<const Eigen::Matrix<double, -1, 1, 0, -1, 1>, 0, Eigen::InnerStride<1> > const &",
+                "::Eigen::Ref<const Eigen::Matrix<double, -1, 1, 0>, 0, Eigen::InnerStride<1>> const &",
+                "::Eigen::Ref<const Eigen::Matrix<double, -1, 1>> const &",
+            ]
 
             for cls in [self.ompl_ns.class_('Constraint')]: #,
-#                        self.ompl_ns.class_('ConstraintIntersection')]:
+                #                        self.ompl_ns.class_('ConstraintIntersection')]:
                 for method in ['function', 'jacobian']:
                     for signature in signatures:
                         try:
@@ -374,8 +442,8 @@ class ompl_base_generator_t(code_generator_t):
             pass
 
         # Exclude PlannerData::getEdges function that returns a map of PlannerDataEdge* for now
-        #self.ompl_ns.class_('PlannerData').member_functions('getEdges').exclude()
-        #self.std_ns.class_('map< unsigned int, ompl::base::PlannerDataEdge const*>').include()
+        # self.ompl_ns.class_('PlannerData').member_functions('getEdges').exclude()
+        # self.std_ns.class_('map< unsigned int, ompl::base::PlannerDataEdge const*>').include()
         mapUintToPlannerDataEdge_cls = self.std_ns.class_(
             'map< unsigned int, const ompl::base::PlannerDataEdge *>')
         mapUintToPlannerDataEdge_cls.rename('mapUintToPlannerDataEdge')
@@ -455,6 +523,10 @@ class ompl_base_generator_t(code_generator_t):
         except declaration_not_found_t:
             pass
 
+        # add wrappers for std::optional types and 3D Dubins PathTypes
+        for dubins3d in ['Owen', 'Vana', 'VanaOwen']:
+            self.add_optional_wrapper(f'ompl::base::{dubins3d}StateSpace::PathType')
+            self.ompl_ns.class_(f"{dubins3d}StateSpace").class_("PathType").member_function("length").include()
 
 class ompl_control_generator_t(code_generator_t):
     def __init__(self):
@@ -812,7 +884,9 @@ class ompl_geometric_generator_t(code_generator_t):
             }
             {
                 // wrapper for PRMstar, derived from single-threaded PRM_wrapper
-                bp::class_<PRMstar_wrapper, bp::bases< PRM_wrapper >, boost::noncopyable >("PRMstar", bp::init< ompl::base::SpaceInformationPtr const & >( bp::arg("si") ) )
+                bp::class_<PRMstar_wrapper, bp::bases< PRM_wrapper >, boost::noncopyable >("PRMstar", bp::init< ompl::base::SpaceInformationPtr const & >( bp::arg("si") ) );
+                bp::class_<PRMstar_wrapper, bp::bases< PRM_wrapper >, boost::noncopyable >("PRMstar", bp::init< ompl::base::PlannerData const & >( bp::arg("data") ) )
+
             """)
         # Add wrapper code for PRM*
         PRM_cls.add_declaration_code("""
@@ -820,6 +894,11 @@ class ompl_geometric_generator_t(code_generator_t):
         {
         public:
             PRMstar_wrapper(const ompl::base::SpaceInformationPtr &si) : PRM_wrapper(si, true)
+            {
+                setName("PRMstar");
+                params_.remove("max_nearest_neighbors");
+            }
+            PRMstar_wrapper(const ompl::base::PlannerData &data) : PRM_wrapper(data, true)
             {
                 setName("PRMstar");
                 params_.remove("max_nearest_neighbors");

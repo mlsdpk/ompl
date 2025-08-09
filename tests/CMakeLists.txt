@@ -57,6 +57,9 @@ if (OMPL_BUILD_TESTS)
     # Test constrained planning
     add_ompl_test(test_constraint_sphere geometric/constraint/test_sphere.cpp)
 
+    # Test space-time planning
+    add_ompl_test(test_spacetime_STRRTstar geometric/spacetime/STRRTstar_test.cpp)
+
     # Test planning with controls on a 2D map
     add_ompl_test(test_2dmap_control control/2dmap/2dmap.cpp)
     add_ompl_test(test_planner_data_control control/planner_data.cpp)
@@ -83,8 +86,7 @@ if (OMPL_BUILD_TESTS)
         endif(WIN32)
         add_custom_command(TARGET py_std_function POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:py_std_function>"
-            "${CMAKE_CURRENT_SOURCE_DIR}/util"
-            WORKING_DIRECTORY "${LIBRARY_OUTPUT_PATH}")
+            "${CMAKE_CURRENT_SOURCE_DIR}/util")
         add_ompl_python_test(util/test_py_std_function.py)
     endif()
 

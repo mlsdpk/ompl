@@ -50,6 +50,11 @@
 #include "ompl/base/spaces/DiscreteStateSpace.h"
 #include "ompl/base/spaces/ReedsSheppStateSpace.h"
 #include "ompl/base/spaces/DubinsStateSpace.h"
+#include "ompl/base/spaces/TrochoidStateSpace.h"
+
+#include "ompl/base/spaces/OwenStateSpace.h"
+#include "ompl/base/spaces/VanaStateSpace.h"
+#include "ompl/base/spaces/VanaOwenStateSpace.h"
 
 #include "ompl/base/spaces/special/TorusStateSpace.h"
 #include "ompl/base/spaces/special/SphereStateSpace.h"
@@ -93,6 +98,45 @@ BOOST_AUTO_TEST_CASE(ReedsShepp_Simple)
     bounds2.setLow(-3);
     bounds2.setHigh(3);
     d->setBounds(bounds2);
+
+    d->setup();
+    d->sanityChecks();
+}
+
+BOOST_AUTO_TEST_CASE(Owen_Simple)
+{
+    auto d(std::make_shared<base::OwenStateSpace>());
+
+    base::RealVectorBounds bounds(3);
+    bounds.setLow(-10);
+    bounds.setHigh(10);
+    d->setBounds(bounds);
+
+    d->setup();
+    d->sanityChecks();
+}
+
+BOOST_AUTO_TEST_CASE(Vana_Simple)
+{
+    auto d(std::make_shared<base::VanaStateSpace>());
+
+    base::RealVectorBounds bounds(3);
+    bounds.setLow(-10);
+    bounds.setHigh(10);
+    d->setBounds(bounds);
+
+    d->setup();
+    d->sanityChecks();
+}
+
+BOOST_AUTO_TEST_CASE(VanaOwen_Simple)
+{
+    auto d(std::make_shared<base::VanaOwenStateSpace>());
+
+    base::RealVectorBounds bounds(3);
+    bounds.setLow(-10);
+    bounds.setHigh(10);
+    d->setBounds(bounds);
 
     d->setup();
     d->sanityChecks();
