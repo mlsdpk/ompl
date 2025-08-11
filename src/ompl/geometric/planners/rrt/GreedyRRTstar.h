@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2024, Phone Thiha Kyaw
+ *  Copyright (c) 2024, University of Toronto
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *   * Neither the name of Phone Thiha Kyaw nor the names of its
+ *   * Neither the name of University of Toronto nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -58,21 +58,24 @@ namespace ompl
 
             @par Short description
             \ref gGreedyRRTstar "G-RRT*" is a greedy version of the anytime Rapidly-exploring Random Trees algorithm
-           (RRT*). It improves the initial solution-finding time of RRT* by maintaining two trees rooted at both the
-           start and goal ends, advancing toward each other using greedy connection heuristics similar to RRT-Connect
-           algorithm. It also accelerates the convergence rate of RRT* by introducing a greedy version of direct
-           informed sampling procedure, which guides the sampling towards the promising region of the problem domain
-           based on heuristics.
+            (RRT*). It improves the initial solution-finding time of RRT* by maintaining two trees rooted at both the
+            start and goal ends, advancing toward each other using greedy connection heuristics similar to RRT-Connect
+            algorithm. It also accelerates the convergence rate of RRT* by introducing a greedy version of direct
+            informed sampling procedure, which guides the sampling towards the promising region of the problem domain
+            based on heuristics.
 
-            @par Associated publication:
+            @par Associated publications:
 
-            Kyaw, P. T., Le, A. V., Yi, L., Veerajagadheswar, P., Elara, M. R., Vo, D. T., & Vu, M. B. (2024).
-            Greedy Heuristics for Sampling-based Motion Planning in High-Dimensional State Spaces.
+            Kyaw, P. T., Le, A. V., Yi, L., Veerajagadheswar, P., Vu, M. B., & Elara, M. R. (2024).
+            Greedy heuristics for sampling-based motion planning in high-dimensional state spaces.
             arXiv preprint arXiv:2405.03411.
             DOI: <a href="https://doi.org/10.48550/arXiv.2405.03411">arXiv.2405.03411</a>.
             arXiv: <a href="https://arxiv.org/abs/2405.03411">2405.03411 [cs.RO]</a>.
-            Multimedia: <a href="https://www.youtube.com/playlist?list=PLfuffIv3zZBnQ1oTXYNsuXOfI9tjRBMQv">
-            YouTube Playlist</a>.
+
+            Kyaw, P. T., et al..(2022).
+            Energy-efficient path planning of reconfigurable robots in complex environments.
+            IEEE Transactions on Robotics, 38(4), 2481-2494.
+            DOI: <a href="https://doi.org/10.1109/TRO.2022.3147408">TRO.2022.3147408</a>.
         */
 
         /** \brief Greedy version of the anytime Rapidly-exploring Random Trees algorithm */
@@ -122,6 +125,30 @@ namespace ompl
             bool getDelayCC() const
             {
                 return delayCC_;
+            }
+
+            /** \brief Option that delays rewiring procedures until an initial solution is found */
+            void setDelayRewiring(bool delayRewiring)
+            {
+                delayRewiring_ = delayRewiring;
+            }
+
+            /** \brief Get the state of the delayed rewiring option */
+            bool getDelayRewiring() const
+            {
+                return delayRewiring_;
+            }
+
+            /** \brief Option to use the balanced bidirectional search (ensures that both trees are the same size) */
+            void setBalancedSearch(bool useBalancedBiDirectionalSearch)
+            {
+                useBalancedBiDirectionalSearch_ = useBalancedBiDirectionalSearch;
+            }
+
+            /** \brief Get the state of the balanced bidirectional search option */
+            bool getBalancedSearch() const
+            {
+                return useBalancedBiDirectionalSearch_;
             }
 
             /** \brief Controls whether the tree is pruned during the search. This pruning removes
@@ -240,16 +267,6 @@ namespace ompl
                 return rewireFactor_;
             }
 
-            void setAncestryDepth(unsigned int depth)
-            {
-                ancestry_depth_ = depth;
-            }
-
-            unsigned int getAncestryDepth() const
-            {
-                return ancestry_depth_;
-            }
-
             /** \brief Set a different nearest neighbors datastructure */
             template <template <typename T> class NN>
             void setNearestNeighbors()
@@ -263,26 +280,6 @@ namespace ompl
             }
 
             void setup() override;
-
-            /** \brief Set the goal bias
-
-                In the process of randomly selecting states in
-                the state space to attempt to go towards, the
-                algorithm may in fact choose the actual goal state, if
-                it knows it, with some probability. This probability
-                is a real number between 0.0 and 1.0; its value should
-                usually be around 0.05 and should not be too large. It
-                is probably a good idea to use the default value. */
-            void setGoalBias(double goalBias)
-            {
-                goalBias_ = goalBias;
-            }
-
-            /** \brief Get the goal bias the planner is using */
-            double getGoalBias() const
-            {
-                return goalBias_;
-            }
 
             /** \brief Set the greedy biasing ratio
              *
@@ -493,10 +490,6 @@ namespace ompl
             /** \brief A flag that toggles between expanding the start tree (true) or goal tree (false). */
             bool startTree_{true};
 
-            /** \brief The fraction of time the goal is picked as the state to expand towards (if such a state is
-             * available) */
-            double goalBias_{.05};
-
             /** \brief A fration of time a random state is sampled from the greedy informed set to control
              * the exploration and exploitation process.  */
             double greedyBiasingRatio_{.9};
@@ -511,7 +504,7 @@ namespace ompl
             RNG rng_;
 
             /** \brief Option to use k-nearest search for rewiring */
-            bool useKNearest_{false};
+            bool useKNearest_{true};
 
             /** \brief The rewiring factor, s, so that r_rrt = s \times r_rrt* > r_rrt* (or k_rrt = s \times k_rrt* >
              * k_rrt*) */
@@ -525,6 +518,12 @@ namespace ompl
 
             /** \brief Option to delay and reduce collision checking within iterations */
             bool delayCC_{true};
+
+            /** \brief Option to delay the rewiring until initial solution has been found */
+            bool delayRewiring_{true};
+
+            /** \brief Option to make the bidirectional search balanced */
+            bool useBalancedBiDirectionalSearch_{true};
 
             /** \brief The measure of the problem when we pruned it (if this isn't in use, it will be set to
              * si_->getSpaceMeasure())*/
@@ -546,16 +545,15 @@ namespace ompl
             bool useAdmissibleCostToCome_{true};
 
             /** \brief The number of attempts to make at informed sampling */
-            unsigned int numSampleAttempts_{1u};
-
-            unsigned int ancestry_depth_{0u};
+            unsigned int numSampleAttempts_{100u};
 
             /** \brief Stores the start states as Motions. */
             std::vector<Motion *> startMotions_;
 
-            /** \brief A list of states in the tree that satisfy the goal condition */
+            /** \brief Stores the goal states as Motions. */
             std::vector<Motion *> goalMotions_;
 
+            /** \brief A list of states in the tree that satisfy the goal condition */
             std::vector<Motion *> bestGoalMotions_;
 
             /** \brief The best goal motion. */

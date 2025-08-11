@@ -1,7 +1,7 @@
 /*********************************************************************
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2024, Phone Thiha Kyaw
+ *  Copyright (c) 2024, University of Toronto
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *   * Neither the name of Phone Thiha Kyaw nor the names of its
+ *   * Neither the name of University of Toronto nor the names of its
  *     contributors may be used to endorse or promote products derived
  *     from this software without specific prior written permission.
  *
@@ -61,18 +61,20 @@ ompl::geometric::GreedyRRTstar::GreedyRRTstar(const base::SpaceInformationPtr &s
     Planner::declareParam<bool>("use_k_nearest", this, &GreedyRRTstar::setKNearest, &GreedyRRTstar::getKNearest, "0,1");
     Planner::declareParam<bool>("delay_collision_checking", this, &GreedyRRTstar::setDelayCC,
                                 &GreedyRRTstar::getDelayCC, "0,1");
+    Planner::declareParam<bool>("delay_rewiring", this, &GreedyRRTstar::setDelayRewiring,
+                                &GreedyRRTstar::getDelayRewiring, "0,1");
+    Planner::declareParam<bool>("balanced_search", this, &GreedyRRTstar::setBalancedSearch,
+                                &GreedyRRTstar::getBalancedSearch, "0,1");
     Planner::declareParam<bool>("informed_sampling", this, &GreedyRRTstar::setInformedSampling,
                                 &GreedyRRTstar::getInformedSampling, "0,1");
     Planner::declareParam<bool>("greedy_informed_sampling", this, &GreedyRRTstar::setGreedyInformedSampling,
                                 &GreedyRRTstar::getGreedyInformedSampling, "0,1");
     Planner::declareParam<bool>("tree_pruning", this, &GreedyRRTstar::setTreePruning, &GreedyRRTstar::getTreePruning,
                                 "0,1");
-
     Planner::declareParam<bool>("pruned_measure", this, &GreedyRRTstar::setPrunedMeasure,
                                 &GreedyRRTstar::getPrunedMeasure, "0,1");
-
-    Planner::declareParam<unsigned int>("ancestry_depth", this, &GreedyRRTstar::setAncestryDepth,
-                                        &GreedyRRTstar::getAncestryDepth, "1:1:1000000");
+    Planner::declareParam<unsigned int>("number_sampling_attempts", this, &GreedyRRTstar::setNumSamplingAttempts,
+                                        &GreedyRRTstar::getNumSamplingAttempts, "10:10:100000");
 
     bestConnectionPoint_ = std::make_pair<Motion *, Motion *>(nullptr, nullptr);
     connectionPoints_.clear();
@@ -244,16 +246,13 @@ ompl::geometric::GreedyRRTstar::GrowState ompl::geometric::GreedyRRTstar::growTr
 
     /////////////////////////////////////////////////////////////////////////////////////
 
-    // this part is similar to rejection sampling but only applies to x_new
-    // x_new is rejected if it does not improve the current best solution cost
-    // i do not think this is necessary since once solution is found,
-    // x_new will guarantee to be within this heuristic ellipse
-    // (require benchmarking to prove this)
-
-    auto h_cost = costToGoHeuristic(dstate, tgi.start);
+    // x_new is rejected if connecting to it does not improve the current best solution cost
+    // check if g(xnear) + c(xnear, xnew) + hhat(xnew) can improve the current best solution cost
+    // this will also make sure both trees are not overlapping each other
 
     auto soln_heuristic_cost =
-        opt_->combineCosts(opt_->combineCosts(nmotion->cost, opt_->motionCost(nmotion->state, dstate)), h_cost);
+        opt_->combineCosts(opt_->combineCosts(nmotion->cost, opt_->motionCost(nmotion->state, dstate)),
+                           costToGoHeuristic(dstate, tgi.start));
 
     if (!opt_->isCostBetterThan(soln_heuristic_cost, bestCost_))
     {
@@ -278,26 +277,21 @@ ompl::geometric::GreedyRRTstar::GrowState ompl::geometric::GreedyRRTstar::growTr
     motion->cost = opt_->combineCosts(nmotion->cost, motion->incCost);
 
     // we delay the parent selection and rewiring until we found an initial solution
-    if (!bestGoalMotion_)
+    if (delayRewiring_)
     {
-        tree->add(motion);
-        tgi.xmotion = motion;
-        motion->parent->children.push_back(motion);
+        if (!bestGoalMotion_)
+        {
+            // OMPL_DEBUG("Rewiring is delayed until we found an initial solution...");
+            tree->add(motion);
+            tgi.xmotion = motion;
+            motion->parent->children.push_back(motion);
 
-        return reach ? REACHED : ADVANCED;
+            return reach ? REACHED : ADVANCED;
+        }
     }
 
     // Find nearby neighbors of the new motion
     getNeighbors(tree, motion, nbh);
-
-    // number of all nearby vertices that lie within the neighborhood radius
-    auto nearby_vertices_size = nbh.size();
-
-    // Get ancestors of nearby neighbors
-    // getAncestors(tree, nbh);
-
-    // number of ancestor vertices of nearby neighbors (excluding neighbors)
-    auto ancestors_size = nbh.size() - nearby_vertices_size;
 
     rewireTest += nbh.size();
     ++statesGenerated;
@@ -471,16 +465,34 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::costToComeHeuristic(Motion *mot
         return best_cost_to_come_heuristic;
     }
 
-    auto goal = pdef_->getGoal().get()->as<base::GoalState>();
-    return opt_->motionCostHeuristic(motion->state, goal->getState());
+    base::Cost costToCome = opt_->infiniteCost();
+
+    // Find the min from each goal
+    for (auto &goalMotion : goalMotions_)
+    {
+        costToCome = opt_->betterCost(
+            costToCome, opt_->motionCostHeuristic(motion->state, goalMotion->state));  // lower-bounding cost from the
+                                                                                       // state to the goal
+    }
+
+    return costToCome;
 }
 
 ompl::base::Cost ompl::geometric::GreedyRRTstar::costToGoHeuristic(Motion *motion, bool isStartTree) const
 {
     if (isStartTree)
     {
-        auto goal = pdef_->getGoal().get()->as<base::GoalState>();
-        return opt_->motionCostHeuristic(motion->state, goal->getState());
+        base::Cost costToGo = opt_->infiniteCost();
+
+        // Find the min from each goal
+        for (auto &goalMotion : goalMotions_)
+        {
+            costToGo = opt_->betterCost(
+                costToGo, opt_->motionCostHeuristic(motion->state, goalMotion->state));  // lower-bounding cost from the
+                                                                                         // state to the goal
+        }
+
+        return costToGo;
     }
 
     // find best cost to come heuristic
@@ -500,8 +512,17 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::costToGoHeuristic(base::State *
 {
     if (isStartTree)
     {
-        auto goal = pdef_->getGoal().get()->as<base::GoalState>();
-        return opt_->motionCostHeuristic(state, goal->getState());
+        base::Cost costToGo = opt_->infiniteCost();
+
+        // Find the min from each goal
+        for (auto &goalMotion : goalMotions_)
+        {
+            costToGo = opt_->betterCost(
+                costToGo, opt_->motionCostHeuristic(state, goalMotion->state));  // lower-bounding cost from the
+                                                                                 // state to the goal
+        }
+
+        return costToGo;
     }
 
     // find best cost to come heuristic
@@ -553,15 +574,6 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
         return base::PlannerStatus::INVALID_GOAL;
     }
 
-    // Allocate a sampler if necessary
-    if (!sampler_ && !infSampler_)
-    {
-        allocSampler();
-    }
-
-    OMPL_INFORM("%s: Starting planning with %d states already in datastructure. Size of best goal motions: %d",
-                getName().c_str(), (int)(tStart_->size() + tGoal_->size()), bestGoalMotions_.size());
-
     const base::ReportIntermediateSolutionFn intermediateSolutionCallback = pdef_->getIntermediateSolutionCallback();
 
     TreeGrowingInfo tgi;
@@ -570,7 +582,6 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
     Motion *approxsol = nullptr;
     double approxdif = std::numeric_limits<double>::infinity();
     auto *rmotion = new Motion(si_);
-    bool solved = false;
 
     valid.clear();
     rewireTest = 0;
@@ -579,6 +590,41 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
     incCosts.clear();
     sortedCostIndices.clear();
     nbh.clear();
+
+    // our functor for sorting nearest neighbors
+    CostIndexCompare compareFn(costs, *opt_);
+
+    if (tGoal_->size() == 0 || pis_.getSampledGoalsCount() < tGoal_->size() / 2)
+    {
+        const base::State *st = tGoal_->size() == 0 ? pis_.nextGoal(ptc) : pis_.nextGoal();
+        if (st != nullptr)
+        {
+            auto *motion = new Motion(si_);
+            si_->copyState(motion->state, st);
+            motion->root = motion->state;
+            motion->cost = opt_->identityCost();
+            tGoal_->add(motion);
+            goalMotions_.push_back(motion);
+        }
+
+        if (tGoal_->size() == 0)
+        {
+            OMPL_ERROR("%s: Unable to sample any valid states for goal tree", getName().c_str());
+            return base::PlannerStatus::INVALID_GOAL;
+        }
+    }
+
+    // Allocate a sampler if necessary
+    if (!sampler_ && !infSampler_)
+    {
+        OMPL_INFORM("%s: Creating informed sampler...", getName().c_str());
+        allocSampler();
+    }
+
+    OMPL_INFORM("%s: Starting planning with %d states already in datastructure (%d start and %d goal states). Size of "
+                "best goal motions: %d",
+                getName().c_str(), (int)(tStart_->size() + tGoal_->size()), (int)(tStart_->size()),
+                (int)(tGoal_->size()), bestGoalMotions_.size());
 
     if (bestGoalMotion_)
         OMPL_INFORM("%s: Starting planning with existing solution of cost %.5f", getName().c_str(), bestCost_.value());
@@ -591,8 +637,6 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
                     std::min(maxDistance_, r_rrt_ * std::pow(log((double)(tStart_->size() + tGoal_->size() + 1u)) /
                                                                  ((double)(tStart_->size() + tGoal_->size() + 1u)),
                                                              1 / (double)(si_->getStateDimension()))));
-    // our functor for sorting nearest neighbors
-    CostIndexCompare compareFn(costs, *opt_);
 
     while (!ptc)
     {
@@ -602,6 +646,19 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
         tgi.start = startTree_;
         startTree_ = !startTree_;
         TreeData &otherTree = startTree_ ? tStart_ : tGoal_;
+
+        if (useBalancedBiDirectionalSearch_)
+        {
+            if ((std::abs(static_cast<float>(tree->size() - otherTree->size())) / tree->size()) < 1.f)
+            {
+                startTree_ = !startTree_;
+
+                TreeData &tree = startTree_ ? tStart_ : tGoal_;
+                tgi.start = startTree_;
+                startTree_ = !startTree_;
+                TreeData &otherTree = startTree_ ? tStart_ : tGoal_;
+            }
+        }
 
         if (tGoal_->size() == 0 || pis_.getSampledGoalsCount() < tGoal_->size() / 2)
         {
@@ -671,7 +728,6 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
                     bestGoalMotions_.push_back(goalMotion);
 
                     checkForSolution = true;
-                    solved = true;
                 }
                 else
                 {
@@ -928,7 +984,7 @@ void ompl::geometric::GreedyRRTstar::updateChildCosts(Motion *m)
 
 void ompl::geometric::GreedyRRTstar::getNeighbors(TreeData &tree, Motion *motion, std::vector<Motion *> &nbh) const
 {
-    auto cardDbl = static_cast<double>(tree->size() + 1u);
+    auto cardDbl = static_cast<double>(tStart_->size() + tGoal_->size() + 1u);
     if (useKNearest_)
     {
         //- k-nearest RRT*
@@ -940,38 +996,6 @@ void ompl::geometric::GreedyRRTstar::getNeighbors(TreeData &tree, Motion *motion
         double r = std::min(
             maxDistance_, r_rrt_ * std::pow(log(cardDbl) / cardDbl, 1 / static_cast<double>(si_->getStateDimension())));
         tree->nearestR(motion, r, nbh);
-    }
-}
-
-void ompl::geometric::GreedyRRTstar::getAncestors(TreeData &tree, std::vector<Motion *> &nbh) const
-{
-    if (ancestry_depth_ == 0u)
-        return;
-
-    std::size_t initial_neighbors_size = nbh.size();
-
-    for (std::size_t i = 0; i < initial_neighbors_size; ++i)
-    {
-        // get predecessor vertex
-        auto nbh_parent = nbh[i]->parent;
-
-        // if no predecessor exist, we skip to another neighbor
-        if (!nbh_parent)
-            continue;
-
-        for (std::size_t i = 0; i < ancestry_depth_; ++i)
-        {
-            // if this parent is not inside our nearby vertices
-            // this is an acestor vertex
-            if (std::find(nbh.begin(), nbh.end(), nbh_parent) == nbh.end())
-            {
-                nbh.push_back(nbh_parent);
-            }
-
-            nbh_parent = nbh_parent->parent;
-            if (!nbh_parent)
-                break;
-        }
     }
 }
 
@@ -1370,9 +1394,18 @@ ompl::base::Cost ompl::geometric::GreedyRRTstar::solutionHeuristic(const Motion 
         {
             costToCome = motion->cost;  // current cost from the state to the goal
         }
-        const base::Cost costToGo =
-            opt_->costToGo(motion->state, pdef_->getGoal().get());  // lower-bounding cost from the state to the goal
-        return opt_->combineCosts(costToCome, costToGo);            // add the two costs
+
+        base::Cost costToGo = opt_->infiniteCost();
+
+        // Find the min from each goal
+        for (auto &goalMotion : goalMotions_)
+        {
+            costToGo = opt_->betterCost(
+                costToGo, opt_->motionCostHeuristic(motion->state, goalMotion->state));  // lower-bounding cost from the
+                                                                                         // state to the goal
+        }
+
+        return opt_->combineCosts(costToCome, costToGo);  // add the two costs
     }
     else
     {
@@ -1507,7 +1540,9 @@ void ompl::geometric::GreedyRRTstar::setInformedSampling(bool informedSampling)
             infSampler_.reset();
 
             // Create the sampler
-            allocSampler();
+            // we cannot do this here since moveit creates the planner before goal states are given
+            // informed set requires at least one start and goal
+            // allocSampler();
         }
     }
 }
@@ -1520,6 +1555,8 @@ void ompl::geometric::GreedyRRTstar::allocSampler()
 
 bool ompl::geometric::GreedyRRTstar::sampleUniform(base::State *statePtr)
 {
+    // OMPL_DEBUG("bestCost: %lf, greedyBestCost: %lf", bestCost_, greedyBestCost_);
+
     // sample from the greedy informed set
     if (rng_.uniform01() < greedyBiasingRatio_)
         return infSampler_->sampleUniform(statePtr, greedyBestCost_);
