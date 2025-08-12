@@ -184,7 +184,6 @@ void ompl::geometric::GreedyRRTstar::clear()
 {
     setup_ = false;
     Planner::clear();
-    sampler_.reset();
     infSampler_.reset();
     freeMemory();
     if (tStart_)
@@ -211,8 +210,6 @@ void ompl::geometric::GreedyRRTstar::clear()
 
     bestGoalMotion_ = nullptr;
     bestGoalMotions_.clear();
-
-    checked_motions.reserve(100u);
 }
 
 ompl::geometric::GreedyRRTstar::GrowState ompl::geometric::GreedyRRTstar::growTree(TreeData &tree, TreeGrowingInfo &tgi,
@@ -615,7 +612,7 @@ ompl::base::PlannerStatus ompl::geometric::GreedyRRTstar::solve(const base::Plan
     }
 
     // Allocate a sampler if necessary
-    if (!sampler_ && !infSampler_)
+    if (!infSampler_)
     {
         OMPL_INFORM("%s: Creating informed sampler...", getName().c_str());
         allocSampler();
@@ -1533,10 +1530,9 @@ void ompl::geometric::GreedyRRTstar::setInformedSampling(bool informedSampling)
         useInformedSampling_ = informedSampling;
 
         // If we currently have a sampler, we need to make a new one
-        if (sampler_ || infSampler_)
+        if (infSampler_)
         {
-            // Reset the samplers
-            sampler_.reset();
+            // Reset the sampler
             infSampler_.reset();
 
             // Create the sampler
@@ -1555,6 +1551,16 @@ void ompl::geometric::GreedyRRTstar::allocSampler()
 
 bool ompl::geometric::GreedyRRTstar::sampleUniform(base::State *statePtr)
 {
+    // I dont want to trigger the random number generation here yet
+    // since we don't need it until we found an initial solution
+    if (!bestGoalMotion_)
+    {
+        // Simply return a state from the regular sampler
+        // infSampler handles that internally since bestCost is still inf
+        infSampler_->sampleUniform(statePtr, bestCost_);
+        return true;
+    }
+
     // OMPL_DEBUG("bestCost: %lf, greedyBestCost: %lf", bestCost_, greedyBestCost_);
 
     // sample from the greedy informed set

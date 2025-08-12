@@ -457,8 +457,6 @@ namespace ompl
             std::vector<std::size_t> sortedCostIndices;
             std::vector<int> valid;
 
-            std::vector<Motion *> checked_motions;
-
             bool checkForSolution{false};
 
             std::vector<Motion *> nbh;
@@ -474,9 +472,6 @@ namespace ompl
 
             /** \brief Create the samplers */
             void allocSampler();
-
-            /** \brief State sampler */
-            base::StateSamplerPtr sampler_;
 
             /** \brief An informed sampler */
             base::InformedSamplerPtr infSampler_;
